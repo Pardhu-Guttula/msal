@@ -19,19 +19,11 @@ const WrappedView = () => {
       })
       .catch((error) => console.log(error));
   };
-  const handleLogout = () => instance.logout();
+
   return (
     <div className="App">
       <AuthenticatedTemplate>
-        {activeAccount ? (
-          <div>
-            Authenticated Successfully...{" "}
-            <div>
-              Wanna Logout? Click Here
-              <button onClick={handleLogout}>Log Out</button>
-            </div>
-          </div>
-        ) : null}
+        {activeAccount ? <p>Authenticated Successfully</p> : null}
       </AuthenticatedTemplate>
       <UnauthenticatedTemplate>
         <button onClick={handleRedirect}>Sign up</button>
@@ -40,12 +32,4 @@ const WrappedView = () => {
   );
 };
 
-const App = ({ instance }) => {
-  return (
-    <MsalProvider instance={instance}>
-      <WrappedView />
-    </MsalProvider>
-  );
-};
-
-export default App;
+export default WrappedView;
