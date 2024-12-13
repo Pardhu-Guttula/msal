@@ -2,11 +2,11 @@ name: Deploy React App to Azure Web App via Docker
 
 on:
   push:
-    branches: main-1
+    branches: main
 
 jobs:
   build_and_deploy:
-    name: Build, Push Docker Image to Docker Hub and Deploy to Azure
+    name: Build, Push Docker Image to Docker Hub, and Deploy to Azure
     runs-on: ubuntu-latest
 
     steps:
@@ -21,33 +21,24 @@ jobs:
 
       - name: Build Docker Image
         run: |
-          IMAGE_TAG=${{ github.sha }}  # or $(date +%s) for timestamp
-          docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/react-img:${IMAGE_TAG} .
+          IMAGE_TAG=${{ github.sha }}  # Use the GitHub commit SHA as the image tag
+          docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/msal:${IMAGE_TAG} .
           echo "IMAGE_TAG=${IMAGE_TAG}" >> $GITHUB_ENV
 
       - name: Push Docker Image to Docker Hub
         run: |
-          docker push ${{ secrets.DOCKERHUB_USERNAME }}/react-img:${{ env.IMAGE_TAG }}
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/msal:${{ env.IMAGE_TAG }}
 
       - name: Log in to Azure
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Create Staging Slot
+      - name: Deploy Docker Image to Azure Web App
         run: |
-          az webapp deployment slot create --name ReactAppDemoUsingDocker --resource-group bluegreendeployment --slot staging
-        continue-on-error: true  # Allow this step to succeed even if the slot already exists
-
-      # Configure Web App for Docker and deploy to staging slot
-      - name: 'Deploy Docker Image to Azure Web App Slot'
-        run: |
-          az webapp config container set --name 'ReactAppDemoUsingDocker' \
-            --resource-group 'bluegreendeployment' \
-            --slot 'staging' \
-            --container-image-name ${{ secrets.DOCKERHUB_USERNAME }}/react-img:${{ env.IMAGE_TAG }} \
+          az webapp config container set --name 'msal-webapp-docker' \
+            --resource-group 'msal' \
+            --container-image-name ${{ secrets.DOCKERHUB_USERNAME }}/msal:${{ env.IMAGE_TAG }} \
             --container-registry-url https://index.docker.io/v1/ \
             --container-registry-user ${{ secrets.DOCKERHUB_USERNAME }} \
             --container-registry-password ${{ secrets.DOCKERHUB_PASSWORD }}
-
-      
