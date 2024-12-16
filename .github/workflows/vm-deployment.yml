@@ -1,0 +1,63 @@
+name: Github-hosted Runner
+
+on:
+  push:
+    branches: main
+
+jobs:
+  push_to_registry:
+    name: Deployment with Docker and Azure VM
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: pardhuguttula/msal
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Create SSH directory
+        run: |
+          mkdir -p ~/.ssh
+          touch ~/.ssh/known_hosts
+
+      - name: Deploy and run container on Azure VM
+        env:
+          AZURE_VM_IP: ${{ secrets.AZURE_VM_IP }}
+          AZURE_SSH_USERNAME: ${{ secrets.AZURE_SSH_USERNAME }}
+          AZURE_SSH_KEY: ${{ secrets.AZURE_SSH_KEY }}
+        run: |
+          echo "${AZURE_SSH_KEY}" > private_key
+          chmod 600 private_key
+
+          echo "Adding VM IP to known_hosts"
+          ssh-keyscan -H $AZURE_VM_IP >> ~/.ssh/known_hosts
+
+          # Stop and remove existing container if running
+          ssh -i private_key -o StrictHostKeyChecking=yes $AZURE_SSH_USERNAME@$AZURE_VM_IP "docker ps -q --filter 'name=msal' | grep -q . && docker stop msal && docker rm msal || echo 'No existing container to stop'"
+
+          # Pull the latest image from Docker Hub
+          ssh -i private_key -o StrictHostKeyChecking=yes $AZURE_SSH_USERNAME@$AZURE_VM_IP "docker pull pardhuguttula/msal:${{ steps.meta.outputs.tags }}"
+
+          # Run the container
+          ssh -i private_key -o StrictHostKeyChecking=yes $AZURE_SSH_USERNAME@$AZURE_VM_IP "docker run -d --name msal -p 5000:5000 pardhuguttula/msal:${{ steps.meta.outputs.tags }}"
+
+          # Clean up
+          echo "Removing private key"
+          rm private_key
