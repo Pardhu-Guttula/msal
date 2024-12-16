@@ -2,7 +2,7 @@ name: Github-hosted Runner
 
 on:
   push:
-    branches: main-1
+    branches: main
 
 jobs:
   push_to_registry:
