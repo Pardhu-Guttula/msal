@@ -2,30 +2,30 @@ name: Github-hosted Runner
 
 on:
   push:
-    branches: main
+    branches: main-1
 
 jobs:
   push_to_registry:
-    name: Deployment with Docker and Azure VM
+    name: Deployment is done by Github-Hosted Runner
     runs-on: ubuntu-latest
     steps:
       - name: Check out the repo
         uses: actions/checkout@v3
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@v2
+        uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@v4
+        uses: docker/metadata-action@98669ae865ea3cffbcbaa878cf57c20bbf1c6c38
         with:
           images: pardhuguttula/msal
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@ad44023a93711e3deb337508980b4b5e9bcdc5dc
         with:
           context: .
           push: true
@@ -37,7 +37,7 @@ jobs:
           mkdir -p ~/.ssh
           touch ~/.ssh/known_hosts
 
-      - name: Deploy and run container on Azure VM
+      - name: Deploy to Azure VM
         env:
           AZURE_VM_IP: ${{ secrets.AZURE_VM_IP }}
           AZURE_SSH_USERNAME: ${{ secrets.AZURE_SSH_USERNAME }}
@@ -46,18 +46,21 @@ jobs:
           echo "${AZURE_SSH_KEY}" > private_key
           chmod 600 private_key
 
-          echo "Adding VM IP to known_hosts"
+          echo "Adding VM ip to known_hosts"
           ssh-keyscan -H $AZURE_VM_IP >> ~/.ssh/known_hosts
 
-          # Stop and remove existing container if running
-          ssh -i private_key -o StrictHostKeyChecking=yes $AZURE_SSH_USERNAME@$AZURE_VM_IP "docker ps -q --filter 'name=msal' | grep -q . && docker stop msal && docker rm msal || echo 'No existing container to stop'"
+          # Transfer the deployment script to the remote server
+          echo "Copying deploy.sh"
+          scp -i private_key -o StrictHostKeyChecking=yes deploy.sh $AZURE_SSH_USERNAME@$AZURE_VM_IP:/tmp/deploy.sh
 
-          # Pull the latest image from Docker Hub
-          ssh -i private_key -o StrictHostKeyChecking=yes $AZURE_SSH_USERNAME@$AZURE_VM_IP "docker pull pardhuguttula/msal:${{ steps.meta.outputs.tags }}"
+          # Execute the deployment script on the remote server
+          echo "Executing deploy.sh"
+          ssh -i private_key -o StrictHostKeyChecking=yes $AZURE_SSH_USERNAME@$AZURE_VM_IP 'bash /tmp/deploy.sh'
 
-          # Run the container
-          ssh -i private_key -o StrictHostKeyChecking=yes $AZURE_SSH_USERNAME@$AZURE_VM_IP "docker run -d --name msal -p 5000:5000 pardhuguttula/msal:${{ steps.meta.outputs.tags }}"
+          # Deleting deploy.sh from remote server
+          echo "Removing deploy.sh"
+          ssh -i private_key -o StrictHostKeyChecking=yes $AZURE_SSH_USERNAME@$AZURE_VM_IP 'rm /tmp/deploy.sh'
 
           # Clean up
-          echo "Removing private key"
+          echo "Removing Private key"
           rm private_key
